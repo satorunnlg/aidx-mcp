@@ -6,6 +6,9 @@ DESIGN.md
 TODO.md
 claude_desktop_config.json
 
+# ログファイル
+client/mcp-server/logs/
+
 # ========================================
 # Python
 # ========================================

@@ -1,5 +1,6 @@
 """AIDX MCP Server 設定"""
 import os
+from pathlib import Path
 
 # CAD接続設定
 CAD_TYPE = os.getenv("AIDX_CAD_TYPE", "fusion360")
@@ -43,3 +44,9 @@ ERR_OBJECT_NOT_FOUND = 0x2003
 ERR_OPERATION_FAILED = 0x2004
 ERR_TIMEOUT = 0x3000
 ERR_RESOURCE_BUSY = 0x3001
+
+# ログ設定
+LOG_DIR = Path(__file__).parent.parent / "logs"
+LOG_FILE = LOG_DIR / f"mcp_server_{CAD_TYPE}.log"
+LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
+LOG_BACKUP_COUNT = 5  # ローテーション数

@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool
@@ -18,14 +19,38 @@ from config import (
     AIDX_HOST,
     AIDX_PORT,
     CAD_TYPE,
+    LOG_DIR,
+    LOG_FILE,
+    LOG_MAX_BYTES,
+    LOG_BACKUP_COUNT,
 )
 
-# ロギング設定（STDIOサーバーのためstderrに出力）
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='[%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stderr)]
+# ログディレクトリ作成
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# ロギング設定（stderrとファイルの両方に出力）
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# フォーマッター
+formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
+# stderrハンドラー（STDIO通信を妨げないため）
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setLevel(logging.DEBUG)
+stderr_handler.setFormatter(formatter)
+logger.addHandler(stderr_handler)
+
+# ファイルハンドラー（ローテーション付き）
+file_handler = RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=LOG_MAX_BYTES,
+    backupCount=LOG_BACKUP_COUNT,
+    encoding='utf-8'
 )
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 # MCPサーバーインスタンス
 app = Server("aidx-mcp")
