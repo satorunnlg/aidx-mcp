@@ -29,7 +29,8 @@ aidx_client: AIDXClient | None = None
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """利用可能なツール一覧"""
-    return [
+    print("[DEBUG] list_tools called", file=sys.stderr)
+    tools = [
         Tool(
             name="screenshot",
             description="CADビューポートのスクリーンショットを取得",
@@ -95,6 +96,8 @@ async def list_tools() -> list[Tool]:
             }
         )
     ]
+    print(f"[DEBUG] Returning {len(tools)} tools", file=sys.stderr)
+    return tools
 
 
 async def _ensure_connection():
@@ -129,10 +132,15 @@ async def _ensure_connection():
 @app.call_tool()
 async def call_tool(name: str, arguments: dict):
     """ツール実行"""
+    print(f"[DEBUG] call_tool invoked: name='{name}', arguments={arguments}", file=sys.stderr)
+
     # CAD接続を確保（遅延接続）
     try:
+        print(f"[DEBUG] Ensuring connection to CAD...", file=sys.stderr)
         await _ensure_connection()
+        print(f"[DEBUG] Connection successful", file=sys.stderr)
     except RuntimeError as e:
+        print(f"[DEBUG] Connection failed: {e}", file=sys.stderr)
         return {
             "content": [{
                 "type": "text",
@@ -142,15 +150,17 @@ async def call_tool(name: str, arguments: dict):
         }
 
     try:
+        print(f"[DEBUG] Executing tool: {name}", file=sys.stderr)
         if name == "screenshot":
-            return await _screenshot()
+            result = await _screenshot()
         elif name == "import_file":
-            return await _import_file(arguments)
+            result = await _import_file(arguments)
         elif name == "get_objects":
-            return await _get_objects(arguments)
+            result = await _get_objects(arguments)
         elif name == "modify":
-            return await _modify(arguments)
+            result = await _modify(arguments)
         else:
+            print(f"[DEBUG] Unknown tool requested: {name}", file=sys.stderr)
             return {
                 "content": [{
                     "type": "text",
@@ -158,6 +168,9 @@ async def call_tool(name: str, arguments: dict):
                 }],
                 "isError": True
             }
+
+        print(f"[DEBUG] Tool '{name}' executed successfully", file=sys.stderr)
+        return result
 
     except AIDXProtocolError as e:
         # AIDXプロトコルエラー（CAD側からのエラーレスポンス）
