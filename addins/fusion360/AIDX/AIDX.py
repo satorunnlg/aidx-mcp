@@ -12,6 +12,7 @@ if str(_script_dir) not in sys.path:
     sys.path.insert(0, str(_script_dir))
 
 from protocol import AIDXServer
+import protocol
 from commands.base import AIDXCommand
 
 # グローバル変数
@@ -26,29 +27,52 @@ def run(context):
     global _app, _ui, _server
 
     try:
+        protocol._log("=== AIDX Addin run() started ===")
         _app = adsk.core.Application.get()
         _ui = _app.userInterface
+        protocol._log("Application and UI obtained")
+
+        # 既存サーバーのクリーンアップ（再起動時の対策）
+        if _server is not None:
+            protocol._log("Cleaning up existing server instance...")
+            try:
+                _server.stop()
+            except Exception as e:
+                protocol._log(f"Warning: Failed to stop existing server: {e}")
+            _server = None
+            protocol._log("Existing server cleaned up")
 
         # コマンド自動ロード
+        protocol._log("Loading commands...")
         commands = load_commands()
+        protocol._log(f"Loaded {len(commands)} commands")
 
         # AIDXサーバー起動
+        protocol._log("Creating AIDXServer instance...")
         _server = AIDXServer(host="127.0.0.1", port=8109)
+        protocol._log("AIDXServer instance created")
 
         # コマンド登録
+        protocol._log("Registering commands...")
         for cmd_id, command_instance in commands.items():
             _server.register_command(cmd_id, command_instance.execute)
+        protocol._log("All commands registered")
 
         # サーバー起動（バックグラウンドスレッド）
+        protocol._log("Starting server...")
         _server.start()
+        protocol._log("Server start() returned")
 
         # 登録コマンドリスト作成
         cmd_list = ", ".join([f"0x{cid:04X}" for cid in sorted(commands.keys())])
         _ui.messageBox(f"AIDX Addin started.\n{len(commands)} commands loaded:\n{cmd_list}")
+        protocol._log("=== AIDX Addin run() completed ===")
 
-    except:
+    except Exception as e:
+        error_msg = traceback.format_exc()
+        protocol._log(f"ERROR in run(): {error_msg}")
         if _ui:
-            _ui.messageBox(f"Failed to start AIDX:\n{traceback.format_exc()}")
+            _ui.messageBox(f"Failed to start AIDX:\n{error_msg}")
 
 
 def stop(context):

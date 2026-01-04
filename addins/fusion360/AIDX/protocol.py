@@ -33,6 +33,7 @@ ERR_TIMEOUT = 0x3000
 
 # ログファイルパス（Windowsの場合はTempディレクトリ）
 LOG_FILE = Path(os.environ.get("TEMP", "/tmp")) / "aidx_fusion360.log"
+LOG_ERROR_FILE = Path(os.environ.get("TEMP", "/tmp")) / "aidx_fusion360_error.log"
 
 
 def _log(message: str):
@@ -42,8 +43,15 @@ def _log(message: str):
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"[{timestamp}] {message}\n")
             f.flush()
-    except:
-        pass  # ログ出力エラーは無視
+    except Exception as e:
+        # ログ出力エラーを別ファイルに記録
+        try:
+            with open(LOG_ERROR_FILE, "a", encoding="utf-8") as f:
+                f.write(f"[{timestamp}] LOG ERROR: {type(e).__name__}: {e}\n")
+                f.write(f"  Message: {message}\n")
+                f.flush()
+        except:
+            pass
 
 
 class AIDXProtocolError(Exception):
@@ -82,9 +90,16 @@ class AIDXServer:
         if self.running:
             return
 
+        _log(f"AIDXServer starting on {self.host}:{self.port}")
         self.running = True
-        self.thread = threading.Thread(target=self._server_loop, daemon=True)
+        self.thread = threading.Thread(target=self._server_loop, daemon=False)
         self.thread.start()
+        _log("AIDXServer thread started")
+
+        # スレッドが実際に起動するまで待機
+        import time
+        time.sleep(0.1)
+        _log(f"Thread is alive: {self.thread.is_alive()}")
 
     def stop(self):
         """TCPサーバーを停止"""
@@ -104,37 +119,59 @@ class AIDXServer:
 
     def _server_loop(self):
         """サーバーループ（バックグラウンドスレッドで実行）"""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((self.host, self.port))
-        self.server_socket.listen(1)
-        self.server_socket.settimeout(1.0)  # accept()のタイムアウト
+        _log("_server_loop started")
+        try:
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            _log(f"Attempting to bind to {self.host}:{self.port}...")
+            self.server_socket.bind((self.host, self.port))
+            _log("Bind successful")
+            self.server_socket.listen(1)
+            self.server_socket.settimeout(1.0)  # accept()のタイムアウト
+            _log(f"Server listening on {self.host}:{self.port}")
+        except Exception as e:
+            _log(f"FATAL: Failed to start server: {type(e).__name__}: {e}")
+            return
 
         while self.running:
             try:
-                # クライアント接続待機
+                # クライアント接続待機（ブロッキング、1秒タイムアウト）
                 self.client_socket, addr = self.server_socket.accept()
+                _log(f"Client connected from {addr}")
                 self.client_socket.settimeout(RECV_TIMEOUT)
 
                 # リクエスト処理ループ
+                _log("Entering request processing loop")
                 while self.running:
                     try:
                         self._handle_request()
                     except socket.timeout:
                         # タイムアウトは継続（接続維持）
+                        _log("Request timeout (waiting for data), continuing...")
                         continue
                     except AIDXProtocolError as e:
                         # プロトコルエラーはエラーレスポンス送信
+                        _log(f"Protocol error: {e.code} - {e.message}")
                         self._send_error_response(e)
+                        # エラーレスポンス送信後は接続を維持
+                        continue
+                    except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                        # クライアントが接続を閉じた（正常終了）
+                        _log("Client disconnected")
+                        break
                     except Exception as e:
                         # 予期しないエラーは接続切断
+                        _log(f"Unexpected error in request loop: {type(e).__name__}: {e}")
+                        import traceback
+                        _log(traceback.format_exc())
                         break
 
             except socket.timeout:
-                # accept()タイムアウトは継続
+                # accept()タイムアウトは正常動作（次のループで再度待機）
                 continue
             except Exception as e:
                 # 接続エラーは継続（再接続待機）
+                _log(f"Connection error: {type(e).__name__}: {e}")
                 if self.client_socket:
                     try:
                         self.client_socket.close()
@@ -142,10 +179,12 @@ class AIDXServer:
                         pass
                     self.client_socket = None
 
+        _log("Server loop exited")
+
     def _handle_request(self):
         """1リクエストの処理"""
-        # ヘッダ受信（16バイト）
-        header_data = self._recv_exact(16)
+        # ヘッダ受信（20バイト: IHHHHII = 4+2+2+2+2+4+4）
+        header_data = self._recv_exact(20)
 
         # ヘッダ解析
         magic, cmd_id, flags, seq, reserved, payload_size, total_size = struct.unpack(

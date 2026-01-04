@@ -33,6 +33,19 @@ aidx-mcp/
 
 #### Fusion 360
 
+**方法1: デプロイスクリプトを使用（推奨）**
+
+```powershell
+# リポジトリルートから実行
+powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
+```
+
+オプション:
+- `-Clean`: 既存のアドインを削除してクリーンデプロイ
+- `-Force`: 確認なしで実行
+
+**方法2: 手動コピー**
+
 1. `addins/fusion360/AIDX` フォルダを Fusion 360 のアドインディレクトリにコピー:
    ```
    Windows: %APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\
@@ -45,7 +58,7 @@ aidx-mcp/
 
 4. **アドイン** タブで `AIDX` を選択し、**実行** をクリック
 
-5. "AIDX Addin started. 4 commands loaded." のメッセージを確認
+5. "AIDX Addin started. 7 commands loaded." のメッセージを確認
 
 詳細は [addins/fusion360/README.md](addins/fusion360/README.md) を参照。
 

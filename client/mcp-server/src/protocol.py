@@ -2,6 +2,7 @@
 import asyncio
 import struct
 import json
+import sys
 from typing import Optional
 from config import (
     AIDX_HOST,
@@ -90,8 +91,10 @@ class AIDXClient:
                     len(payload),    # TotalSize (4)
                 )
 
+                print(f"[CLIENT] Sending: CMD=0x{cmd_id:04X}, Seq={seq}, PayloadSize={len(payload)}, TotalSize={total_size}", file=sys.stderr)
                 self.writer.write(header + payload)
                 await self.writer.drain()
+                print(f"[CLIENT] Data flushed to server", file=sys.stderr)
             else:
                 # 分割送信
                 await self._send_chunked(cmd_id, seq, payload, total_size)
@@ -152,9 +155,9 @@ class AIDXClient:
         Raises:
             AIDXProtocolError: エラーレスポンス受信時
         """
-        # ヘッダ受信（16バイト）
+        # ヘッダ受信（20バイト: IHHHHII = 4+2+2+2+2+4+4）
         header_data = await asyncio.wait_for(
-            self.reader.readexactly(16),
+            self.reader.readexactly(20),
             timeout=RECV_TIMEOUT
         )
 
@@ -250,9 +253,9 @@ class AIDXClient:
 
         # 残りのチャンクを受信
         while True:
-            # ヘッダ受信
+            # ヘッダ受信（20バイト: IHHHHII = 4+2+2+2+2+4+4）
             header_data = await asyncio.wait_for(
-                self.reader.readexactly(16),
+                self.reader.readexactly(20),
                 timeout=RECV_TIMEOUT
             )
 

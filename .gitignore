@@ -5,9 +5,16 @@ CLAUDE.md
 DESIGN.md
 TODO.md
 claude_desktop_config.json
+.claude/
 
 # ログファイル
 client/mcp-server/logs/
+
+# テスト生成ファイル
+test_screenshot.png
+test_*.json
+*.test.png
+*.test.jpg
 
 # ========================================
 # Python
@@ -252,3 +259,11 @@ artifacts/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Windows予約ファイル名（誤作成防止）
+nul
+con
+prn
+aux
+com[1-9]
+lpt[1-9]
