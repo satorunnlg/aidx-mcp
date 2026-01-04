@@ -15,6 +15,8 @@ from config import (
     CMD_IMPORT_FILE,
     CMD_GET_OBJECTS,
     CMD_MODIFY,
+    CMD_CREATE_OBJECT,
+    CMD_DELETE_OBJECT,
     CONNECT_RETRY_MAX,
     CONNECT_RETRY_INTERVAL,
     AIDX_HOST,
@@ -137,6 +139,61 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["id", "matrix"]
             }
+        ),
+        Tool(
+            name="create_object",
+            description="プリミティブ形状（Box, Cylinder, Sphere, Torus）を作成",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["box", "cylinder", "sphere", "torus"],
+                        "description": "形状タイプ"
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "形状パラメータ。box: {width, height, length}, cylinder: {radius, height}, sphere: {radius}, torus: {majorRadius, minorRadius}。すべてmm単位"
+                    },
+                    "position": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "description": "配置座標 [x, y, z] (mm単位)",
+                        "default": [0, 0, 0]
+                    },
+                    "rotation": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "description": "回転角度 [rx, ry, rz] (度数法)",
+                        "default": [0, 0, 0]
+                    }
+                },
+                "required": ["type", "params"]
+            }
+        ),
+        Tool(
+            name="delete_object",
+            description="オブジェクト（BRepBody, Occurrence, Sketch）を削除",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "削除するオブジェクトのentityToken"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": ["BRepBody", "Occurrence", "Sketch"],
+                        "description": "オブジェクトタイプ",
+                        "default": "BRepBody"
+                    }
+                },
+                "required": ["id"]
+            }
         )
     ]
     logging.debug(f"Returning {len(tools)} tools")
@@ -211,6 +268,10 @@ async def call_tool(name: str, arguments: dict):
             result = await _get_objects(arguments)
         elif name == "modify":
             result = await _modify(arguments)
+        elif name == "create_object":
+            result = await _create_object(arguments)
+        elif name == "delete_object":
+            result = await _delete_object(arguments)
         else:
             logging.warning(f"Unknown tool requested: {name}")
             return {
@@ -301,6 +362,34 @@ async def _modify(args: dict) -> dict:
     result = json.loads(response.decode("utf-8"))
 
     return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+async def _create_object(args: dict) -> dict:
+    """プリミティブ形状作成"""
+    payload = json.dumps({
+        "type": args["type"],
+        "params": args["params"],
+        "position": args.get("position", [0, 0, 0]),
+        "rotation": args.get("rotation", [0, 0, 0])
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_CREATE_OBJECT, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+
+async def _delete_object(args: dict) -> dict:
+    """オブジェクト削除"""
+    payload = json.dumps({
+        "id": args["id"],
+        "type": args.get("type", "BRepBody")
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_DELETE_OBJECT, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
 
 
 async def connect_with_retry() -> AIDXClient:
