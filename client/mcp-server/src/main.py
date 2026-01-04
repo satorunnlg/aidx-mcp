@@ -246,6 +246,68 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["edge_ids", "radius"]
             }
+        ),
+        Tool(
+            name="chamfer",
+            description="エッジにシャンファー（面取り）を適用",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "edge_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "エッジのentityToken配列"
+                    },
+                    "distance": {
+                        "type": "number",
+                        "description": "等距離面取りの距離（mm単位）"
+                    },
+                    "distance1": {
+                        "type": "number",
+                        "description": "2距離面取りの距離1（mm単位）"
+                    },
+                    "distance2": {
+                        "type": "number",
+                        "description": "2距離面取りの距離2（mm単位）"
+                    }
+                },
+                "required": ["edge_ids"]
+            }
+        ),
+        Tool(
+            name="extrude",
+            description="面やプロファイルを押し出し",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "profile_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "プロファイルまたは面のentityToken配列"
+                    },
+                    "distance": {
+                        "type": "number",
+                        "description": "押し出し距離（mm単位）"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["new", "join", "cut", "intersect"],
+                        "description": "演算タイプ: new=新規, join=結合, cut=減算, intersect=交差"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["positive", "negative", "symmetric"],
+                        "description": "押し出し方向",
+                        "default": "positive"
+                    },
+                    "taper_angle": {
+                        "type": "number",
+                        "description": "テーパー角度（度）",
+                        "default": 0
+                    }
+                },
+                "required": ["profile_ids", "distance", "operation"]
+            }
         )
     ]
     logging.debug(f"Returning {len(tools)} tools")
@@ -328,6 +390,10 @@ async def call_tool(name: str, arguments: dict):
             result = await _combine(arguments)
         elif name == "fillet":
             result = await _fillet(arguments)
+        elif name == "chamfer":
+            result = await _chamfer(arguments)
+        elif name == "extrude":
+            result = await _extrude(arguments)
         else:
             logging.warning(f"Unknown tool requested: {name}")
             return {
@@ -471,6 +537,41 @@ async def _fillet(args: dict) -> dict:
     }).encode("utf-8")
 
     response = await aidx_client.send_command(CMD_FILLET, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+
+async def _chamfer(args: dict) -> dict:
+    """シャンファー"""
+    payload_data = {"edge_ids": args["edge_ids"]}
+
+    # distanceまたはdistance1/distance2を設定
+    if "distance" in args:
+        payload_data["distance"] = args["distance"]
+    else:
+        payload_data["distance1"] = args.get("distance1", 5)
+        payload_data["distance2"] = args.get("distance2", 5)
+
+    payload = json.dumps(payload_data).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_CHAMFER, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+
+async def _extrude(args: dict) -> dict:
+    """押し出し"""
+    payload = json.dumps({
+        "profile_ids": args["profile_ids"],
+        "distance": args["distance"],
+        "operation": args["operation"],
+        "direction": args.get("direction", "positive"),
+        "taper_angle": args.get("taper_angle", 0)
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_EXTRUDE, payload)
     result = json.loads(response.decode("utf-8"))
 
     return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
