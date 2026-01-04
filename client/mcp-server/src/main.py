@@ -10,6 +10,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool
 from protocol import AIDXClient, AIDXProtocolError
 from config import (
+    CMD_PING,
     CMD_SCREENSHOT,
     CMD_IMPORT_FILE,
     CMD_GET_OBJECTS,
@@ -64,6 +65,15 @@ async def list_tools() -> list[Tool]:
     """利用可能なツール一覧"""
     logging.debug("list_tools called")
     tools = [
+        Tool(
+            name="ping",
+            description="接続確認用の軽量コマンド（即座にpongを返す）",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
         Tool(
             name="screenshot",
             description="CADビューポートのスクリーンショットを取得",
@@ -133,6 +143,13 @@ async def list_tools() -> list[Tool]:
     return tools
 
 
+async def _ping() -> dict:
+    """Ping実行"""
+    response = await aidx_client.send_command(CMD_PING)
+    result = json.loads(response.decode("utf-8"))
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+
 async def _ensure_connection():
     """
     CAD接続を確保（未接続の場合は接続試行）
@@ -184,7 +201,9 @@ async def call_tool(name: str, arguments: dict):
 
     try:
         logging.debug(f"Executing tool: {name}")
-        if name == "screenshot":
+        if name == "ping":
+            result = await _ping()
+        elif name == "screenshot":
             result = await _screenshot()
         elif name == "import_file":
             result = await _import_file(arguments)
