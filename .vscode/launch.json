@@ -3,11 +3,10 @@
   "configurations": [
     {
       "name": "AIDX MCP Server (venv)",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
-      "module": "main",
+      "program": "${workspaceFolder}/client/mcp-server/src/main.py",
       "cwd": "${workspaceFolder}/client/mcp-server/src",
-      "python": "${workspaceFolder}/client/mcp-server/venv/Scripts/python.exe",
       "env": {
         "AIDX_CAD_TYPE": "fusion360",
         "AIDX_PORT": "8109"
@@ -17,11 +16,10 @@
     },
     {
       "name": "AIDX Test Client",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/client/test-client/src/test_protocol.py",
       "cwd": "${workspaceFolder}/client/test-client/src",
-      "python": "${workspaceFolder}/client/test-client/venv/Scripts/python.exe",
       "console": "integratedTerminal",
       "justMyCode": false
     },
