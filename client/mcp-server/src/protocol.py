@@ -80,7 +80,7 @@ class AIDXClient:
             if total_size <= CHUNK_SIZE:
                 # 単一パケット送信
                 header = struct.pack(
-                    "<IHHHII",
+                    "<IHHHHII",
                     AIDX_MAGIC,      # Magic (4)
                     cmd_id,          # CommandID (2)
                     0x0000,          # Flags (2) - 単一パケット
@@ -124,7 +124,7 @@ class AIDXClient:
 
             # ヘッダ構築
             header = struct.pack(
-                "<IHHHII",
+                "<IHHHHII",
                 AIDX_MAGIC,
                 cmd_id,
                 flags,
@@ -160,7 +160,7 @@ class AIDXClient:
 
         # ヘッダ解析
         magic, cmd_id, flags, seq, reserved, payload_size, total_size = struct.unpack(
-            "<IHHHII", header_data
+            "<IHHHHII", header_data
         )
 
         # Magic確認
@@ -258,7 +258,7 @@ class AIDXClient:
 
             # ヘッダ解析
             magic, cmd_id, flags, seq, reserved, payload_size, chunk_total_size = struct.unpack(
-                "<IHHHII", header_data
+                "<IHHHHII", header_data
             )
 
             # Magic確認
