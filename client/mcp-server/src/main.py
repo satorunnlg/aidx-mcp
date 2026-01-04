@@ -17,6 +17,10 @@ from config import (
     CMD_MODIFY,
     CMD_CREATE_OBJECT,
     CMD_DELETE_OBJECT,
+    CMD_FILLET,
+    CMD_CHAMFER,
+    CMD_EXTRUDE,
+    CMD_COMBINE,
     CONNECT_RETRY_MAX,
     CONNECT_RETRY_INTERVAL,
     AIDX_HOST,
@@ -194,6 +198,54 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["id"]
             }
+        ),
+        Tool(
+            name="combine",
+            description="ブール演算（結合/減算/交差）でボディを組み合わせる",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "target_body_id": {
+                        "type": "string",
+                        "description": "対象ボディのentityToken"
+                    },
+                    "tool_body_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "ツールボディのentityToken配列"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["join", "cut", "intersect"],
+                        "description": "演算タイプ: join=結合, cut=減算, intersect=交差"
+                    },
+                    "keep_tools": {
+                        "type": "boolean",
+                        "description": "ツールボディを保持するか",
+                        "default": False
+                    }
+                },
+                "required": ["target_body_id", "tool_body_ids", "operation"]
+            }
+        ),
+        Tool(
+            name="fillet",
+            description="エッジにフィレット（丸め）を適用",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "edge_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "エッジのentityToken配列"
+                    },
+                    "radius": {
+                        "type": "number",
+                        "description": "フィレット半径（mm単位）"
+                    }
+                },
+                "required": ["edge_ids", "radius"]
+            }
         )
     ]
     logging.debug(f"Returning {len(tools)} tools")
@@ -272,6 +324,10 @@ async def call_tool(name: str, arguments: dict):
             result = await _create_object(arguments)
         elif name == "delete_object":
             result = await _delete_object(arguments)
+        elif name == "combine":
+            result = await _combine(arguments)
+        elif name == "fillet":
+            result = await _fillet(arguments)
         else:
             logging.warning(f"Unknown tool requested: {name}")
             return {
@@ -387,6 +443,34 @@ async def _delete_object(args: dict) -> dict:
     }).encode("utf-8")
 
     response = await aidx_client.send_command(CMD_DELETE_OBJECT, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+
+async def _combine(args: dict) -> dict:
+    """結合演算"""
+    payload = json.dumps({
+        "target_body_id": args["target_body_id"],
+        "tool_body_ids": args["tool_body_ids"],
+        "operation": args["operation"],
+        "keep_tools": args.get("keep_tools", False)
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_COMBINE, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+
+async def _fillet(args: dict) -> dict:
+    """フィレット"""
+    payload = json.dumps({
+        "edge_ids": args["edge_ids"],
+        "radius": args["radius"]
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_FILLET, payload)
     result = json.loads(response.decode("utf-8"))
 
     return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
