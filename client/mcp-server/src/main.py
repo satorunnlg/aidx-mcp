@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import json
+import logging
 import sys
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -19,6 +20,13 @@ from config import (
     CAD_TYPE,
 )
 
+# ロギング設定（STDIOサーバーのためstderrに出力）
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='[%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler(sys.stderr)]
+)
+
 # MCPサーバーインスタンス
 app = Server("aidx-mcp")
 
@@ -29,7 +37,7 @@ aidx_client: AIDXClient | None = None
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """利用可能なツール一覧"""
-    print("[DEBUG] list_tools called", file=sys.stderr)
+    logging.debug("list_tools called")
     tools = [
         Tool(
             name="screenshot",
@@ -96,7 +104,7 @@ async def list_tools() -> list[Tool]:
             }
         )
     ]
-    print(f"[DEBUG] Returning {len(tools)} tools", file=sys.stderr)
+    logging.debug(f"Returning {len(tools)} tools")
     return tools
 
 
@@ -116,9 +124,9 @@ async def _ensure_connection():
         # 初回接続試行（リトライなし、即座に失敗）
         client = AIDXClient()
         try:
-            print(f"Connecting to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}...", file=sys.stderr)
+            logging.info(f"Connecting to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}...")
             await client.connect()
-            print(f"Successfully connected to {CAD_TYPE}!", file=sys.stderr)
+            logging.info(f"Successfully connected to {CAD_TYPE}!")
             aidx_client = client
         except (ConnectionRefusedError, OSError) as e:
             raise RuntimeError(
@@ -132,15 +140,15 @@ async def _ensure_connection():
 @app.call_tool()
 async def call_tool(name: str, arguments: dict):
     """ツール実行"""
-    print(f"[DEBUG] call_tool invoked: name='{name}', arguments={arguments}", file=sys.stderr)
+    logging.debug(f"call_tool invoked: name='{name}', arguments={arguments}")
 
     # CAD接続を確保（遅延接続）
     try:
-        print(f"[DEBUG] Ensuring connection to CAD...", file=sys.stderr)
+        logging.debug("Ensuring connection to CAD...")
         await _ensure_connection()
-        print(f"[DEBUG] Connection successful", file=sys.stderr)
+        logging.debug("Connection successful")
     except RuntimeError as e:
-        print(f"[DEBUG] Connection failed: {e}", file=sys.stderr)
+        logging.error(f"Connection failed: {e}")
         return {
             "content": [{
                 "type": "text",
@@ -150,7 +158,7 @@ async def call_tool(name: str, arguments: dict):
         }
 
     try:
-        print(f"[DEBUG] Executing tool: {name}", file=sys.stderr)
+        logging.debug(f"Executing tool: {name}")
         if name == "screenshot":
             result = await _screenshot()
         elif name == "import_file":
@@ -160,7 +168,7 @@ async def call_tool(name: str, arguments: dict):
         elif name == "modify":
             result = await _modify(arguments)
         else:
-            print(f"[DEBUG] Unknown tool requested: {name}", file=sys.stderr)
+            logging.warning(f"Unknown tool requested: {name}")
             return {
                 "content": [{
                     "type": "text",
@@ -169,7 +177,7 @@ async def call_tool(name: str, arguments: dict):
                 "isError": True
             }
 
-        print(f"[DEBUG] Tool '{name}' executed successfully", file=sys.stderr)
+        logging.debug(f"Tool '{name}' executed successfully")
         return result
 
     except AIDXProtocolError as e:
@@ -265,17 +273,17 @@ async def connect_with_retry() -> AIDXClient:
 
     for attempt in range(1, CONNECT_RETRY_MAX + 1):
         try:
-            print(f"Connecting to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}... (attempt {attempt}/{CONNECT_RETRY_MAX})", file=sys.stderr)
+            logging.info(f"Connecting to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}... (attempt {attempt}/{CONNECT_RETRY_MAX})")
             await client.connect()
-            print(f"Successfully connected to {CAD_TYPE}!", file=sys.stderr)
+            logging.info(f"Successfully connected to {CAD_TYPE}!")
             return client
 
         except (ConnectionRefusedError, OSError) as e:
             if attempt < CONNECT_RETRY_MAX:
-                print(f"Connection failed: {e}. Retrying in {CONNECT_RETRY_INTERVAL} seconds...", file=sys.stderr)
+                logging.warning(f"Connection failed: {e}. Retrying in {CONNECT_RETRY_INTERVAL} seconds...")
                 await asyncio.sleep(CONNECT_RETRY_INTERVAL)
             else:
-                print(f"Connection failed after {CONNECT_RETRY_MAX} attempts.", file=sys.stderr)
+                logging.error(f"Connection failed after {CONNECT_RETRY_MAX} attempts.")
                 raise RuntimeError(
                     f"Failed to connect to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}. "
                     f"Please ensure the CAD addin is running."
@@ -288,8 +296,8 @@ async def main():
 
     # 起動時は接続しない（遅延接続方式）
     aidx_client = None
-    print(f"AIDX MCP Server started (target: {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT})", file=sys.stderr)
-    print(f"Connection will be established on first tool use.", file=sys.stderr)
+    logging.info(f"AIDX MCP Server started (target: {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT})")
+    logging.info("Connection will be established on first tool use.")
 
     # MCPサーバー起動（stdio経由）
     async with stdio_server() as (read_stream, write_stream):
