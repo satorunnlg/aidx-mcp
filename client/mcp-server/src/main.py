@@ -96,16 +96,46 @@ async def list_tools():
     ]
 
 
-@app.call_tool()
-async def call_tool(name: str, arguments: dict):
-    """ツール実行"""
+async def _ensure_connection():
+    """
+    CAD接続を確保（未接続の場合は接続試行）
+
+    Returns:
+        接続済みのAIDXClient
+
+    Raises:
+        RuntimeError: 接続に失敗した場合
+    """
     global aidx_client
 
     if aidx_client is None:
+        # 初回接続試行（リトライなし、即座に失敗）
+        client = AIDXClient()
+        try:
+            print(f"Connecting to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}...", file=sys.stderr)
+            await client.connect()
+            print(f"Successfully connected to {CAD_TYPE}!", file=sys.stderr)
+            aidx_client = client
+        except (ConnectionRefusedError, OSError) as e:
+            raise RuntimeError(
+                f"Failed to connect to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}. "
+                f"Please ensure the CAD addin is running. Details: {e}"
+            )
+
+    return aidx_client
+
+
+@app.call_tool()
+async def call_tool(name: str, arguments: dict):
+    """ツール実行"""
+    # CAD接続を確保（遅延接続）
+    try:
+        await _ensure_connection()
+    except RuntimeError as e:
         return {
             "content": [{
                 "type": "text",
-                "text": "Error: Not connected to CAD. Please ensure Fusion 360/AutoCAD addin is running."
+                "text": f"Connection error: {e}"
             }],
             "isError": True
         }
@@ -242,12 +272,10 @@ async def main():
     """メインエントリーポイント"""
     global aidx_client
 
-    # AIDX接続（リトライ付き）
-    try:
-        aidx_client = await connect_with_retry()
-    except RuntimeError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
+    # 起動時は接続しない（遅延接続方式）
+    aidx_client = None
+    print(f"AIDX MCP Server started (target: {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT})", file=sys.stderr)
+    print(f"Connection will be established on first tool use.", file=sys.stderr)
 
     # MCPサーバー起動（stdio経由）
     async with stdio_server() as (read_stream, write_stream):
