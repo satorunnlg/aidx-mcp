@@ -132,7 +132,7 @@ class AIDXServer:
 
         # ヘッダ解析
         magic, cmd_id, flags, seq, reserved, payload_size, total_size = struct.unpack(
-            "<IHHHII", header_data
+            "<IHHHHII", header_data
         )
 
         # Magic確認
@@ -288,7 +288,7 @@ class AIDXServer:
     def _send_packet(self, cmd_id: int, seq: int, flags: int, payload: bytes, total_size: int):
         """単一パケット送信"""
         header = struct.pack(
-            "<IHHHII",
+            "<IHHHHII",
             AIDX_MAGIC,
             cmd_id,
             flags,
