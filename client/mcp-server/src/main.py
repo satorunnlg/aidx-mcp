@@ -305,4 +305,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Server shutdown requested by user (Ctrl+C)")
+        sys.exit(0)
+    except Exception as e:
+        logging.error(f"Fatal error: {e}")
+        sys.exit(1)
