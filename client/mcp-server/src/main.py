@@ -5,6 +5,7 @@ import json
 import sys
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+from mcp.types import Tool
 from protocol import AIDXClient, AIDXProtocolError
 from config import (
     CMD_SCREENSHOT,
@@ -26,22 +27,22 @@ aidx_client: AIDXClient | None = None
 
 
 @app.list_tools()
-async def list_tools():
+async def list_tools() -> list[Tool]:
     """利用可能なツール一覧"""
     return [
-        {
-            "name": "screenshot",
-            "description": "CADビューポートのスクリーンショットを取得",
-            "inputSchema": {
+        Tool(
+            name="screenshot",
+            description="CADビューポートのスクリーンショットを取得",
+            inputSchema={
                 "type": "object",
                 "properties": {},
                 "required": []
             }
-        },
-        {
-            "name": "import_file",
-            "description": "STEP等の外部ファイルをCADにインポート",
-            "inputSchema": {
+        ),
+        Tool(
+            name="import_file",
+            description="STEP等の外部ファイルをCADにインポート",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "ファイルパス"},
@@ -62,11 +63,11 @@ async def list_tools():
                 },
                 "required": ["path"]
             }
-        },
-        {
-            "name": "get_objects",
-            "description": "CAD内のオブジェクト情報を取得。注意: レスポンス形式はCADによって異なります",
-            "inputSchema": {
+        ),
+        Tool(
+            name="get_objects",
+            description="CAD内のオブジェクト情報を取得。注意: レスポンス形式はCADによって異なります",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "filter": {
@@ -76,11 +77,11 @@ async def list_tools():
                 },
                 "required": []
             }
-        },
-        {
-            "name": "modify",
-            "description": "既存オブジェクトの変形・移動",
-            "inputSchema": {
+        ),
+        Tool(
+            name="modify",
+            description="既存オブジェクトの変形・移動",
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "id": {"type": "string", "description": "オブジェクトID"},
@@ -92,7 +93,7 @@ async def list_tools():
                 },
                 "required": ["id", "matrix"]
             }
-        }
+        )
     ]
 
 
