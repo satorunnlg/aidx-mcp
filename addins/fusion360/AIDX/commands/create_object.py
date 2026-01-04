@@ -79,7 +79,7 @@ class CreateObjectCommand(AIDXCommand):
         rot_deg: list[float]
     ) -> adsk.fusion.BRepBody:
         """
-        ボックスを作成
+        ボックスを作成（TemporaryBRepManager使用）
 
         Args:
             component: コンポーネント
@@ -95,44 +95,37 @@ class CreateObjectCommand(AIDXCommand):
         height_cm = params["height"] / 10.0
         length_cm = params["length"] / 10.0
 
-        # 原点にボックススケッチ作成
-        sketches = component.sketches
-        xy_plane = component.xYConstructionPlane
-        sketch = sketches.add(xy_plane)
+        # 一時BRepマネージャーでボックス作成
+        temp_brep_mgr = adsk.fusion.TemporaryBRepManager.get()
 
-        # 矩形描画（原点中心）
-        lines = sketch.sketchCurves.sketchLines
-        rect = lines.addTwoPointRectangle(
-            adsk.core.Point3D.create(-width_cm / 2, -length_cm / 2, 0),
-            adsk.core.Point3D.create(width_cm / 2, length_cm / 2, 0)
+        # 原点中心のボックスを作成（OrientedBoundingBox3Dを使用）
+        center = adsk.core.Point3D.create(0, 0, 0)
+        length_dir = adsk.core.Vector3D.create(1, 0, 0)
+        width_dir = adsk.core.Vector3D.create(0, 1, 0)
+
+        oriented_box = adsk.core.OrientedBoundingBox3D.create(
+            center,
+            length_dir,
+            width_dir,
+            width_cm,
+            length_cm,
+            height_cm
         )
 
-        # 押し出し
-        prof = sketch.profiles.item(0)
-        extrudes = component.features.extrudeFeatures
-
-        # 押し出し距離（対称に押し出す）
-        distance = adsk.core.ValueInput.createByReal(height_cm)
-
-        # 対称押し出し（中心から上下に）
-        extent_distance = adsk.fusion.DistanceExtentDefinition.create(distance)
-        extrude_input = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        extrude_input.setOneSideExtent(extent_distance, adsk.fusion.ExtentDirections.PositiveExtentDirection)
-        extrude_input.startExtent = adsk.fusion.OffsetStartDefinition.create(
-            adsk.core.ValueInput.createByReal(-height_cm / 2)
-        )
-
-        extrude = extrudes.add(extrude_input)
-        body = extrude.bodies.item(0)
+        temp_body = temp_brep_mgr.createBox(oriented_box)
 
         # 変換行列を適用
         transform = self._create_transform_matrix(pos_cm, rot_deg)
-        move_features = component.features.moveFeatures
-        bodies = adsk.core.ObjectCollection.create()
-        bodies.add(body)
+        temp_brep_mgr.transform(temp_body, transform)
 
-        move_input = move_features.createInput(bodies, transform)
-        move_features.add(move_input)
+        # BaseFeatureを使用してコンポーネントに追加
+        base_feature = component.features.baseFeatures.add()
+        base_feature.startEdit()
+        component.bRepBodies.add(temp_body, base_feature)
+        base_feature.finishEdit()
+
+        # finishEdit後に実際のBRepBodyを取得（最後に追加されたもの）
+        body = component.bRepBodies.item(component.bRepBodies.count - 1)
 
         return body
 
@@ -144,7 +137,7 @@ class CreateObjectCommand(AIDXCommand):
         rot_deg: list[float]
     ) -> adsk.fusion.BRepBody:
         """
-        円柱を作成
+        円柱を作成（TemporaryBRepManager使用）
 
         Args:
             component: コンポーネント
@@ -159,40 +152,33 @@ class CreateObjectCommand(AIDXCommand):
         radius_cm = params["radius"] / 10.0
         height_cm = params["height"] / 10.0
 
-        # XY平面に円スケッチ作成
-        sketches = component.sketches
-        xy_plane = component.xYConstructionPlane
-        sketch = sketches.add(xy_plane)
+        # 一時BRepマネージャーで円柱作成
+        temp_brep_mgr = adsk.fusion.TemporaryBRepManager.get()
 
-        # 円描画（原点中心）
-        circles = sketch.sketchCurves.sketchCircles
-        center = adsk.core.Point3D.create(0, 0, 0)
-        circle = circles.addByCenterRadius(center, radius_cm)
+        # Z軸を中心軸として円柱作成（中心が原点）
+        # createCylinderOrCone(point1, radius1, point2, radius2)
+        point1 = adsk.core.Point3D.create(0, 0, -height_cm / 2)
+        point2 = adsk.core.Point3D.create(0, 0, height_cm / 2)
 
-        # 押し出し
-        prof = sketch.profiles.item(0)
-        extrudes = component.features.extrudeFeatures
-
-        distance = adsk.core.ValueInput.createByReal(height_cm)
-        extent_distance = adsk.fusion.DistanceExtentDefinition.create(distance)
-
-        extrude_input = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        extrude_input.setOneSideExtent(extent_distance, adsk.fusion.ExtentDirections.PositiveExtentDirection)
-        extrude_input.startExtent = adsk.fusion.OffsetStartDefinition.create(
-            adsk.core.ValueInput.createByReal(-height_cm / 2)
+        temp_body = temp_brep_mgr.createCylinderOrCone(
+            point1,
+            radius_cm,
+            point2,
+            radius_cm
         )
-
-        extrude = extrudes.add(extrude_input)
-        body = extrude.bodies.item(0)
 
         # 変換行列を適用
         transform = self._create_transform_matrix(pos_cm, rot_deg)
-        move_features = component.features.moveFeatures
-        bodies = adsk.core.ObjectCollection.create()
-        bodies.add(body)
+        temp_brep_mgr.transform(temp_body, transform)
 
-        move_input = move_features.createInput(bodies, transform)
-        move_features.add(move_input)
+        # BaseFeatureを使用してコンポーネントに追加
+        base_feature = component.features.baseFeatures.add()
+        base_feature.startEdit()
+        component.bRepBodies.add(temp_body, base_feature)
+        base_feature.finishEdit()
+
+        # finishEdit後に実際のBRepBodyを取得（最後に追加されたもの）
+        body = component.bRepBodies.item(component.bRepBodies.count - 1)
 
         return body
 
@@ -204,7 +190,7 @@ class CreateObjectCommand(AIDXCommand):
         rot_deg: list[float]
     ) -> adsk.fusion.BRepBody:
         """
-        球を作成
+        球を作成（TemporaryBRepManager使用）
 
         Args:
             component: コンポーネント
@@ -218,45 +204,25 @@ class CreateObjectCommand(AIDXCommand):
         # mm → cm 変換
         radius_cm = params["radius"] / 10.0
 
-        # YZ平面に半円スケッチ作成
-        sketches = component.sketches
-        yz_plane = component.yZConstructionPlane
-        sketch = sketches.add(yz_plane)
+        # 一時BRepマネージャーで球作成
+        temp_brep_mgr = adsk.fusion.TemporaryBRepManager.get()
 
-        # 半円描画（回転軸を通る）
-        arcs = sketch.sketchCurves.sketchArcs
-        start_point = adsk.core.Point3D.create(0, radius_cm, 0)
-        end_point = adsk.core.Point3D.create(0, -radius_cm, 0)
+        # 原点中心の球を作成
         center = adsk.core.Point3D.create(0, 0, 0)
-
-        arc = arcs.addByCenterStartEnd(center, start_point, end_point)
-
-        # 軸を閉じる（直線で）
-        lines = sketch.sketchCurves.sketchLines
-        line = lines.addByTwoPoints(end_point, start_point)
-
-        # 回転
-        prof = sketch.profiles.item(0)
-        revolves = component.features.revolveFeatures
-
-        # Y軸を中心に360度回転
-        axis = component.yConstructionAxis
-        angle = adsk.core.ValueInput.createByReal(math.pi * 2)
-
-        revolve_input = revolves.createInput(prof, axis, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        revolve_input.setAngleExtent(False, angle)
-
-        revolve = revolves.add(revolve_input)
-        body = revolve.bodies.item(0)
+        temp_body = temp_brep_mgr.createSphere(center, radius_cm)
 
         # 変換行列を適用
         transform = self._create_transform_matrix(pos_cm, rot_deg)
-        move_features = component.features.moveFeatures
-        bodies = adsk.core.ObjectCollection.create()
-        bodies.add(body)
+        temp_brep_mgr.transform(temp_body, transform)
 
-        move_input = move_features.createInput(bodies, transform)
-        move_features.add(move_input)
+        # BaseFeatureを使用してコンポーネントに追加
+        base_feature = component.features.baseFeatures.add()
+        base_feature.startEdit()
+        component.bRepBodies.add(temp_body, base_feature)
+        base_feature.finishEdit()
+
+        # finishEdit後に実際のBRepBodyを取得（最後に追加されたもの）
+        body = component.bRepBodies.item(component.bRepBodies.count - 1)
 
         return body
 
@@ -268,7 +234,7 @@ class CreateObjectCommand(AIDXCommand):
         rot_deg: list[float]
     ) -> adsk.fusion.BRepBody:
         """
-        トーラスを作成
+        トーラスを作成（TemporaryBRepManager使用）
 
         Args:
             component: コンポーネント
@@ -283,45 +249,32 @@ class CreateObjectCommand(AIDXCommand):
         major_radius_cm = params["majorRadius"] / 10.0
         minor_radius_cm = params["minorRadius"] / 10.0
 
-        # XY平面に円スケッチ作成
-        sketches = component.sketches
-        xy_plane = component.xYConstructionPlane
-        sketch = sketches.add(xy_plane)
+        # 一時BRepマネージャーでトーラス作成
+        temp_brep_mgr = adsk.fusion.TemporaryBRepManager.get()
 
-        # チューブの円描画（X軸方向にmajor_radius離れた位置に配置）
-        circles = sketch.sketchCurves.sketchCircles
-        center = adsk.core.Point3D.create(major_radius_cm, 0, 0)
-        circle = circles.addByCenterRadius(center, minor_radius_cm)
+        # 原点中心、Z軸を中心軸としてトーラス作成
+        center = adsk.core.Point3D.create(0, 0, 0)
+        axis = adsk.core.Vector3D.create(0, 0, 1)
 
-        # 回転軸を明示的にスケッチ内に作成（Y軸として）
-        lines = sketch.sketchCurves.sketchLines
-        axis_line = lines.addByTwoPoints(
-            adsk.core.Point3D.create(0, -1, 0),
-            adsk.core.Point3D.create(0, 1, 0)
+        temp_body = temp_brep_mgr.createTorus(
+            center,
+            axis,
+            major_radius_cm,
+            minor_radius_cm
         )
-        axis_line.isConstruction = True  # 構築線として設定
-
-        # 回転
-        prof = sketch.profiles.item(0)
-        revolves = component.features.revolveFeatures
-
-        # 作成した軸線を中心に360度回転
-        angle = adsk.core.ValueInput.createByReal(math.pi * 2)
-
-        revolve_input = revolves.createInput(prof, axis_line, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        revolve_input.setAngleExtent(False, angle)
-
-        revolve = revolves.add(revolve_input)
-        body = revolve.bodies.item(0)
 
         # 変換行列を適用
         transform = self._create_transform_matrix(pos_cm, rot_deg)
-        move_features = component.features.moveFeatures
-        bodies = adsk.core.ObjectCollection.create()
-        bodies.add(body)
+        temp_brep_mgr.transform(temp_body, transform)
 
-        move_input = move_features.createInput(bodies, transform)
-        move_features.add(move_input)
+        # BaseFeatureを使用してコンポーネントに追加
+        base_feature = component.features.baseFeatures.add()
+        base_feature.startEdit()
+        component.bRepBodies.add(temp_body, base_feature)
+        base_feature.finishEdit()
+
+        # finishEdit後に実際のBRepBodyを取得（最後に追加されたもの）
+        body = component.bRepBodies.item(component.bRepBodies.count - 1)
 
         return body
 
