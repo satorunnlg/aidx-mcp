@@ -42,7 +42,9 @@ def run(context):
         # サーバー起動（バックグラウンドスレッド）
         _server.start()
 
-        _ui.messageBox(f"AIDX Addin started. {len(commands)} commands loaded.")
+        # 登録コマンドリスト作成
+        cmd_list = ", ".join([f"0x{cid:04X}" for cid in sorted(commands.keys())])
+        _ui.messageBox(f"AIDX Addin started.\n{len(commands)} commands loaded:\n{cmd_list}")
 
     except:
         if _ui:

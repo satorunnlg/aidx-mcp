@@ -135,6 +135,9 @@ class AIDXServer:
             "<IHHHHII", header_data
         )
 
+        # デバッグ: 受信ヘッダをログ出力
+        print(f"[AIDX] Recv: Magic=0x{magic:08X}, CMD=0x{cmd_id:04X}, Seq={seq}, PayloadSize={payload_size}")
+
         # Magic確認
         if magic != AIDX_MAGIC:
             raise AIDXProtocolError(
@@ -166,6 +169,8 @@ class AIDXServer:
         # コマンド実行
         try:
             if cmd_id not in self.command_handlers:
+                print(f"[AIDX] ERROR: Unknown command 0x{cmd_id:04X}")
+                print(f"[AIDX] Registered commands: {[f'0x{cid:04X}' for cid in self.command_handlers.keys()]}")
                 raise AIDXProtocolError(
                     ERR_INVALID_COMMAND,
                     f"Unknown command: 0x{cmd_id:04X}",
@@ -173,8 +178,10 @@ class AIDXServer:
                     seq
                 )
 
+            print(f"[AIDX] Executing command 0x{cmd_id:04X}...")
             handler = self.command_handlers[cmd_id]
             response_payload = handler(full_payload)
+            print(f"[AIDX] Command 0x{cmd_id:04X} completed, response size={len(response_payload)}")
 
             # レスポンス送信（分割送信対応）
             self.send_response(cmd_id, seq, response_payload)
@@ -298,6 +305,7 @@ class AIDXServer:
             total_size
         )
 
+        print(f"[AIDX] Send: CMD=0x{cmd_id:04X}, Seq={seq}, Flags=0x{flags:04X}, PayloadSize={len(payload)}")
         self.client_socket.sendall(header + payload)
 
     def _send_error_response(self, error: AIDXProtocolError):
