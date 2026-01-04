@@ -4,7 +4,10 @@ import struct
 import threading
 import queue
 import json
+import os
+from pathlib import Path
 from typing import Optional, Callable
+from datetime import datetime
 
 # プロトコル定数
 AIDX_MAGIC = 0x41494458
@@ -27,6 +30,20 @@ ERR_INVALID_PAYLOAD = 0x1002
 ERR_INVALID_SEQUENCE = 0x1003
 ERR_EXECUTION_ERROR = 0x2000
 ERR_TIMEOUT = 0x3000
+
+# ログファイルパス（Windowsの場合はTempディレクトリ）
+LOG_FILE = Path(os.environ.get("TEMP", "/tmp")) / "aidx_fusion360.log"
+
+
+def _log(message: str):
+    """ファイルにログ出力"""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
+            f.flush()
+    except:
+        pass  # ログ出力エラーは無視
 
 
 class AIDXProtocolError(Exception):
@@ -136,7 +153,7 @@ class AIDXServer:
         )
 
         # デバッグ: 受信ヘッダをログ出力
-        print(f"[AIDX] Recv: Magic=0x{magic:08X}, CMD=0x{cmd_id:04X}, Seq={seq}, PayloadSize={payload_size}")
+        _log(f"Recv: Magic=0x{magic:08X}, CMD=0x{cmd_id:04X}, Seq={seq}, PayloadSize={payload_size}")
 
         # Magic確認
         if magic != AIDX_MAGIC:
@@ -169,8 +186,8 @@ class AIDXServer:
         # コマンド実行
         try:
             if cmd_id not in self.command_handlers:
-                print(f"[AIDX] ERROR: Unknown command 0x{cmd_id:04X}")
-                print(f"[AIDX] Registered commands: {[f'0x{cid:04X}' for cid in self.command_handlers.keys()]}")
+                _log(f"ERROR: Unknown command 0x{cmd_id:04X}")
+                _log(f"Registered commands: {[f'0x{cid:04X}' for cid in self.command_handlers.keys()]}")
                 raise AIDXProtocolError(
                     ERR_INVALID_COMMAND,
                     f"Unknown command: 0x{cmd_id:04X}",
@@ -178,10 +195,10 @@ class AIDXServer:
                     seq
                 )
 
-            print(f"[AIDX] Executing command 0x{cmd_id:04X}...")
+            _log(f"Executing command 0x{cmd_id:04X}...")
             handler = self.command_handlers[cmd_id]
             response_payload = handler(full_payload)
-            print(f"[AIDX] Command 0x{cmd_id:04X} completed, response size={len(response_payload)}")
+            _log(f"Command 0x{cmd_id:04X} completed, response size={len(response_payload)}")
 
             # レスポンス送信（分割送信対応）
             self.send_response(cmd_id, seq, response_payload)
@@ -305,7 +322,7 @@ class AIDXServer:
             total_size
         )
 
-        print(f"[AIDX] Send: CMD=0x{cmd_id:04X}, Seq={seq}, Flags=0x{flags:04X}, PayloadSize={len(payload)}")
+        _log(f"Send: CMD=0x{cmd_id:04X}, Seq={seq}, Flags=0x{flags:04X}, PayloadSize={len(payload)}")
         self.client_socket.sendall(header + payload)
 
     def _send_error_response(self, error: AIDXProtocolError):
