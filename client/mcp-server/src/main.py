@@ -1,0 +1,258 @@
+"""AIDX MCP Server メインエントリーポイント"""
+import asyncio
+import base64
+import json
+import sys
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from protocol import AIDXClient, AIDXProtocolError
+from config import (
+    CMD_SCREENSHOT,
+    CMD_IMPORT_FILE,
+    CMD_GET_OBJECTS,
+    CMD_MODIFY,
+    CONNECT_RETRY_MAX,
+    CONNECT_RETRY_INTERVAL,
+    AIDX_HOST,
+    AIDX_PORT,
+    CAD_TYPE,
+)
+
+# MCPサーバーインスタンス
+app = Server("aidx-mcp")
+
+# AIDXクライアント（グローバル）
+aidx_client: AIDXClient | None = None
+
+
+@app.list_tools()
+async def list_tools():
+    """利用可能なツール一覧"""
+    return [
+        {
+            "name": "screenshot",
+            "description": "CADビューポートのスクリーンショットを取得",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "import_file",
+            "description": "STEP等の外部ファイルをCADにインポート",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "ファイルパス"},
+                    "pos": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "description": "配置座標 [x, y, z] (mm単位)"
+                    },
+                    "rot": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "description": "回転角度 [x, y, z] (度数法)"
+                    }
+                },
+                "required": ["path"]
+            }
+        },
+        {
+            "name": "get_objects",
+            "description": "CAD内のオブジェクト情報を取得。注意: レスポンス形式はCADによって異なります",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "filter": {
+                        "type": "object",
+                        "description": "抽出条件（CAD依存）"
+                    }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "modify",
+            "description": "既存オブジェクトの変形・移動",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "オブジェクトID"},
+                    "matrix": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "4x4変換行列（16要素）"
+                    }
+                },
+                "required": ["id", "matrix"]
+            }
+        }
+    ]
+
+
+@app.call_tool()
+async def call_tool(name: str, arguments: dict):
+    """ツール実行"""
+    global aidx_client
+
+    if aidx_client is None:
+        return {
+            "content": [{
+                "type": "text",
+                "text": "Error: Not connected to CAD. Please ensure Fusion 360/AutoCAD addin is running."
+            }],
+            "isError": True
+        }
+
+    try:
+        if name == "screenshot":
+            return await _screenshot()
+        elif name == "import_file":
+            return await _import_file(arguments)
+        elif name == "get_objects":
+            return await _get_objects(arguments)
+        elif name == "modify":
+            return await _modify(arguments)
+        else:
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": f"Error: Unknown tool '{name}'"
+                }],
+                "isError": True
+            }
+
+    except AIDXProtocolError as e:
+        # AIDXプロトコルエラー（CAD側からのエラーレスポンス）
+        error_msg = f"AIDX Protocol Error (Code 0x{e.code:04X}): {e.message}"
+        if e.cmd_id:
+            error_msg += f"\nOriginal Command: 0x{e.cmd_id:04X}"
+        if e.seq:
+            error_msg += f"\nSequence: {e.seq}"
+
+        return {
+            "content": [{
+                "type": "text",
+                "text": error_msg
+            }],
+            "isError": True
+        }
+
+    except Exception as e:
+        # 予期しないエラー
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"Unexpected error: {type(e).__name__}: {str(e)}"
+            }],
+            "isError": True
+        }
+
+
+async def _screenshot() -> dict:
+    """スクリーンショット取得"""
+    image_data = await aidx_client.send_command(CMD_SCREENSHOT)
+    return {
+        "content": [
+            {
+                "type": "image",
+                "data": base64.b64encode(image_data).decode(),
+                "mimeType": "image/png"
+            }
+        ]
+    }
+
+
+async def _import_file(args: dict) -> dict:
+    """ファイルインポート"""
+    payload = json.dumps({
+        "path": args["path"],
+        "pos": args.get("pos", [0, 0, 0]),
+        "rot": args.get("rot", [0, 0, 0])
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_IMPORT_FILE, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+async def _get_objects(args: dict) -> dict:
+    """オブジェクト情報取得"""
+    filter_data = args.get("filter", {})
+    payload = json.dumps(filter_data).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_GET_OBJECTS, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+async def _modify(args: dict) -> dict:
+    """オブジェクト変形"""
+    payload = json.dumps({
+        "id": args["id"],
+        "matrix": args["matrix"]
+    }).encode("utf-8")
+
+    response = await aidx_client.send_command(CMD_MODIFY, payload)
+    result = json.loads(response.decode("utf-8"))
+
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+async def connect_with_retry() -> AIDXClient:
+    """
+    CADアドインへの接続（リトライ機能付き）
+
+    Returns:
+        接続済みのAIDXClient
+
+    Raises:
+        RuntimeError: 最大リトライ回数を超えても接続できなかった場合
+    """
+    client = AIDXClient()
+
+    for attempt in range(1, CONNECT_RETRY_MAX + 1):
+        try:
+            print(f"Connecting to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}... (attempt {attempt}/{CONNECT_RETRY_MAX})", file=sys.stderr)
+            await client.connect()
+            print(f"Successfully connected to {CAD_TYPE}!", file=sys.stderr)
+            return client
+
+        except (ConnectionRefusedError, OSError) as e:
+            if attempt < CONNECT_RETRY_MAX:
+                print(f"Connection failed: {e}. Retrying in {CONNECT_RETRY_INTERVAL} seconds...", file=sys.stderr)
+                await asyncio.sleep(CONNECT_RETRY_INTERVAL)
+            else:
+                print(f"Connection failed after {CONNECT_RETRY_MAX} attempts.", file=sys.stderr)
+                raise RuntimeError(
+                    f"Failed to connect to {CAD_TYPE} at {AIDX_HOST}:{AIDX_PORT}. "
+                    f"Please ensure the CAD addin is running."
+                )
+
+
+async def main():
+    """メインエントリーポイント"""
+    global aidx_client
+
+    # AIDX接続（リトライ付き）
+    try:
+        aidx_client = await connect_with_retry()
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # MCPサーバー起動（stdio経由）
+    async with stdio_server() as (read_stream, write_stream):
+        await app.run(read_stream, write_stream, app.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

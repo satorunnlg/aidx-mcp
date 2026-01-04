@@ -1,3 +1,13 @@
+# ========================================
+# AIDX-MCP プロジェクト固有
+# ========================================
+CLAUDE.md
+DESIGN.md
+TODO.md
+
+# ========================================
+# Python
+# ========================================
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -182,11 +192,11 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 
 # Ruff stuff:
 .ruff_cache/
@@ -205,3 +215,36 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ========================================
+# C# / .NET
+# ========================================
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.csproj.user
+packages/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+
+# Visual Studio
+.vs/
+*.vsidx
+*.vspscc
+*.vssettings
+
+# ========================================
+# OS
+# ========================================
+.DS_Store
+Thumbs.db
+desktop.ini

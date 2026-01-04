@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AIDX MCP Server (venv)",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "cwd": "${workspaceFolder}/client/mcp-server/src",
+      "python": "${workspaceFolder}/client/mcp-server/venv/Scripts/python.exe",
+      "env": {
+        "AIDX_CAD_TYPE": "fusion360",
+        "AIDX_PORT": "8109"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "AIDX Test Client",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/client/test-client/src/test_protocol.py",
+      "cwd": "${workspaceFolder}/client/test-client/src",
+      "python": "${workspaceFolder}/client/test-client/venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "AutoCAD AIDX Addin (Attach)",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "acad.exe"
+    }
+  ]
+}
